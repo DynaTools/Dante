@@ -8,7 +8,7 @@ import requests
 from typing import Dict, Optional, Union, Any
 import logging
 import google.generativeai as genai
-import openai
+from openai import OpenAI
 import deepl
 
 # Configure logging
@@ -178,8 +178,9 @@ class OpenAITranslator(BaseTranslator):
     
     def __init__(self, api_key: str = None):
         super().__init__(api_key)
+        self.client = None
         if api_key:
-            openai.api_key = api_key
+            self.client = OpenAI(api_key=api_key)
     
     def translate(self, text: str, target_lang: str, source_lang: Optional[str] = None, 
                  tone: str = "default") -> str:
@@ -205,8 +206,7 @@ class OpenAITranslator(BaseTranslator):
             user_prompt += f":\n\n{text}"
             
             # Make API call
-            client = openai.OpenAI(api_key=self.api_key)
-            response = client.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -222,6 +222,10 @@ class OpenAITranslator(BaseTranslator):
         except Exception as e:
             logger.error(f"OpenAI API error: {e}")
             raise TranslationError(f"OpenAI translation failed: {str(e)}")
+    
+    def is_available(self) -> bool:
+        """Check if OpenAI translator is available"""
+        return bool(self.api_key) and bool(self.client)
     
     def _get_language_name(self, lang_code: str) -> str:
         """Convert language code to full language name"""
