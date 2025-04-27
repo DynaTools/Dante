@@ -1,0 +1,11 @@
+[theme]
+base="light"
+primaryColor="#14387B"
+secondaryBackgroundColor="#F8F6F2"
+textColor="#2B2B2B"
+font="serif"
+
+[theme.darkMode]
+primaryColor="#3E5F9D"
+secondaryBackgroundColor="#1E1E1E"
+textColor="#F0F0F0"
