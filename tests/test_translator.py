@@ -7,6 +7,8 @@ import unittest.mock as mock
 import json
 import requests
 from typing import Dict, Any, Optional
+import deepl  # Add deepl import for mocking
+import openai # Add openai import for mocking
 
 # Import the modules to test
 from services.translator import (
@@ -57,16 +59,15 @@ class TestDeepLTranslator:
         assert translator._normalize_lang_code("en-us") == "EN-US"
         assert translator._normalize_lang_code("EN-gb") == "EN-GB"
     
-    @mock.patch('requests.post')
-    def test_translate_success(self, mock_post):
+    @mock.patch('deepl.Translator') # Mock the deepl.Translator class
+    def test_translate_success(self, mock_deepl_translator_class):
         """Test successful translation using DeepL"""
-        # Set up mock response
-        mock_response = MockResponse(200, {
-            "translations": [
-                {"text": "Hola mundo"}
-            ]
-        })
-        mock_post.return_value = mock_response
+        # Set up mock response for the translate_text method
+        mock_translator_instance = mock.MagicMock()
+        mock_deepl_translator_class.return_value = mock_translator_instance
+        mock_result = mock.MagicMock()
+        mock_result.text = "Hola mundo"
+        mock_translator_instance.translate_text.return_value = mock_result
         
         # Create translator and call translate
         translator = DeepLTranslator(api_key="test-key")
@@ -76,38 +77,46 @@ class TestDeepLTranslator:
         assert result == "Hola mundo"
         
         # Verify API was called with correct parameters
-        mock_post.assert_called_once()
-        _, kwargs = mock_post.call_args
-        assert kwargs['headers']['Authorization'] == "DeepL-Auth-Key test-key"
-        assert kwargs['json']['text'] == ["Hello world"]
-        assert kwargs['json']['target_lang'] == "ES"
+        mock_translator_instance.translate_text.assert_called_once_with(
+            text="Hello world",
+            target_lang="ES", # Check normalized code
+            source_lang=None,
+            formality=None # Default formality
+        )
     
-    @mock.patch('requests.post')
-    def test_translate_with_source_and_tone(self, mock_post):
+    @mock.patch('deepl.Translator') # Mock the deepl.Translator class
+    def test_translate_with_source_and_tone(self, mock_deepl_translator_class):
         """Test translation with source language and tone"""
-        # Set up mock response
-        mock_response = MockResponse(200, {
-            "translations": [
-                {"text": "Bonjour le monde"}
-            ]
-        })
-        mock_post.return_value = mock_response
+        # Set up mock response for the translate_text method
+        mock_translator_instance = mock.MagicMock()
+        mock_deepl_translator_class.return_value = mock_translator_instance
+        mock_result = mock.MagicMock()
+        mock_result.text = "Bonjour le monde"
+        mock_translator_instance.translate_text.return_value = mock_result
         
         # Create translator and call translate
         translator = DeepLTranslator(api_key="test-key")
         result = translator.translate("Hello world", "fr", "en", "formal")
+
+        # Verify result
+        assert result == "Bonjour le monde" # Add assertion for the result
         
         # Verify API was called with correct parameters
-        mock_post.assert_called_once()
-        _, kwargs = mock_post.call_args
-        assert kwargs['json']['source_lang'] == "EN"
-        assert kwargs['json']['formality'] == "more"
+        mock_translator_instance.translate_text.assert_called_once_with(
+            text="Hello world",
+            target_lang="FR", # Check normalized code
+            source_lang="EN", # Check normalized code
+            formality="prefer_more" # Check formality mapping
+        )
     
-    @mock.patch('requests.post')
-    def test_translate_error(self, mock_post):
+    @mock.patch('deepl.Translator') # Mock the deepl.Translator class
+    def test_translate_error(self, mock_deepl_translator_class):
         """Test error handling for DeepL API"""
-        # Set up mock error response
-        mock_post.side_effect = requests.exceptions.RequestException("API Error")
+        # Set up mock error
+        mock_translator_instance = mock.MagicMock()
+        mock_deepl_translator_class.return_value = mock_translator_instance
+        # Use a specific DeepL exception
+        mock_translator_instance.translate_text.side_effect = deepl.exceptions.DeepLException("API Error")
         
         # Create translator and verify error handling
         translator = DeepLTranslator(api_key="test-key")
@@ -170,21 +179,21 @@ class TestGeminiTranslator:
 class TestOpenAITranslator:
     """Tests for the OpenAITranslator class"""
     
-    @mock.patch('openai.OpenAI')
-    def test_translate_success(self, mock_openai_class):
+    # Mock the specific method making the API call
+    @mock.patch('openai.resources.chat.completions.Completions.create')
+    def test_translate_success(self, mock_completions_create):
         """Test successful translation using OpenAI"""
         # Set up mock response
-        mock_client = mock.MagicMock()
-        mock_openai_class.return_value = mock_client
         mock_response = mock.MagicMock()
         mock_choice = mock.MagicMock()
         mock_message = mock.MagicMock()
         mock_message.content = "Hola mundo"
         mock_choice.message = mock_message
         mock_response.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_completions_create.return_value = mock_response
         
         # Create translator and call translate
+        # Need to initialize the client within the test or mock it too
         translator = OpenAITranslator(api_key="test-key")
         result = translator.translate("Hello world", "es")
         
@@ -192,19 +201,20 @@ class TestOpenAITranslator:
         assert result == "Hola mundo"
         
         # Verify API was called with correct parameters
-        mock_client.chat.completions.create.assert_called_once()
-        _, kwargs = mock_client.chat.completions.create.call_args
+        mock_completions_create.assert_called_once()
+        _, kwargs = mock_completions_create.call_args
         assert kwargs['model'] == "gpt-4"
         assert len(kwargs['messages']) == 2
         assert "Spanish" in kwargs['messages'][1]['content']
+        assert "Hello world" in kwargs['messages'][1]['content']
     
-    @mock.patch('openai.OpenAI')
-    def test_translate_error(self, mock_openai_class):
+    # Mock the specific method making the API call
+    @mock.patch('openai.resources.chat.completions.Completions.create')
+    def test_translate_error(self, mock_completions_create):
         """Test error handling for OpenAI API"""
         # Set up mock error
-        mock_client = mock.MagicMock()
-        mock_openai_class.return_value = mock_client
-        mock_client.chat.completions.create.side_effect = Exception("API Error")
+        # Use a specific OpenAI exception
+        mock_completions_create.side_effect = openai.APIError("API Error", request=None, body=None)
         
         # Create translator and verify error handling
         translator = OpenAITranslator(api_key="test-key")

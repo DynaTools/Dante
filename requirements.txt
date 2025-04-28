@@ -6,3 +6,7 @@ cryptography==42.0.5
 openai
 google-generativeai
 deepl
+beautifulsoup4
+nltk
+pandas
+tweepy==4.14.0

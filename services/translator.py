@@ -5,15 +5,20 @@ Implements a multi-provider API chain (DeepL → Gemini → OpenAI) with fallbac
 import os
 import json
 import requests
-from typing import Dict, Optional, Union, Any
+from typing import Dict, Optional, Union, Any, List, Tuple
 import logging
 import google.generativeai as genai
 from openai import OpenAI
 import deepl
+import time
+from utils.cache import TranslationCache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize the global translation cache
+translation_cache = TranslationCache(max_size=100, ttl=3600)
 
 class TranslationError(Exception):
     """Custom exception for translation errors"""
@@ -137,8 +142,8 @@ class GeminiTranslator(BaseTranslator):
             # Configure the model
             model = genai.GenerativeModel('gemini-1.5-flash')
             
-            # Create prompt with instructions
-            prompt = f"Translate the following text"
+            # Create prompt with direct, clear instructions
+            prompt = "Translate the text below"
             
             if source_lang:
                 prompt += f" from {self._get_language_name(source_lang)}"
@@ -148,7 +153,8 @@ class GeminiTranslator(BaseTranslator):
             if tone.lower() in ["formal", "informal"]:
                 prompt += f" using {tone} tone"
                 
-            prompt += f":\n\n{text}\n\nTranslation:"
+            prompt += ". Respond with ONLY the translation, no explanations, prefixes, or additional text. Here's the text to translate:\n\n"
+            prompt += text
             
             # Generate translation
             response = model.generate_content(prompt)
@@ -176,9 +182,10 @@ class OpenAITranslator(BaseTranslator):
     """OpenAI API integration"""
     name = "openai"
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = "gpt-3.5-turbo"):
         super().__init__(api_key)
         self.client = None
+        self.model = model
         if api_key:
             self.client = OpenAI(api_key=api_key)
     
@@ -189,11 +196,13 @@ class OpenAITranslator(BaseTranslator):
             raise TranslationError("OpenAI API key not available")
         
         try:
-            # Create system instruction
-            system_prompt = "You are a professional translator. Translate text accurately while preserving meaning."
+            # Create system instruction with clear guidance to avoid typical AI patterns
+            system_prompt = ("You are a translation tool that provides only direct translations with no explanations, "
+                           "no introductory text, no notes, and no AI tendencies like 'Sure, I'll translate that' or " 
+                           "'Here's the translation'. Return only the translated text itself.")
             
             # Create user prompt with instructions
-            user_prompt = f"Translate the following text"
+            user_prompt = f"Translate this text"
             
             if source_lang:
                 user_prompt += f" from {self._get_language_name(source_lang)}"
@@ -207,7 +216,7 @@ class OpenAITranslator(BaseTranslator):
             
             # Make API call
             response = self.client.chat.completions.create(
-                model="gpt-4",
+                model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -269,7 +278,7 @@ class TranslatorService:
             self.add_provider(OpenAITranslator(openai_key))
     
     def translate(self, text: str, target_lang: str, source_lang: Optional[str] = None, 
-                tone: str = "default") -> Dict[str, str]:
+                tone: str = "default", retry_count: int = 2) -> Dict[str, str]:
         """
         Translate text using the provider chain with fallback logic
         
@@ -278,6 +287,7 @@ class TranslatorService:
             target_lang: Target language code
             source_lang: Source language code or None for auto-detect
             tone: Formal or informal tone
+            retry_count: Number of retry attempts for each provider
             
         Returns:
             dict: {
@@ -296,25 +306,27 @@ class TranslatorService:
         # Try each provider in sequence until one succeeds
         errors = []
         for provider in self.providers:
-            try:
-                translation = provider.translate(
-                    text=text,
-                    target_lang=target_lang,
-                    source_lang=source_lang,
-                    tone=tone
-                )
-                
-                # Return successful result
-                return {
-                    "translation": translation,
-                    "provider": provider.name,
-                    "error": None
-                }
-                
-            except TranslationError as e:
-                # Log error and continue to next provider
-                logger.warning(f"{provider.name} translation failed: {str(e)}")
-                errors.append(f"{provider.name}: {str(e)}")
+            for attempt in range(retry_count + 1):
+                try:
+                    translation = provider.translate(
+                        text=text,
+                        target_lang=target_lang,
+                        source_lang=source_lang,
+                        tone=tone
+                    )
+                    
+                    # Return successful result
+                    return {
+                        "translation": translation,
+                        "provider": provider.name,
+                        "error": None
+                    }
+                    
+                except TranslationError as e:
+                    # Log error and continue to next provider
+                    logger.warning(f"{provider.name} translation failed on attempt {attempt + 1}: {str(e)}")
+                    errors.append(f"{provider.name} (attempt {attempt + 1}): {str(e)}")
+                    time.sleep(1)  # Optional: wait before retrying
         
         # If we get here, all providers failed
         error_message = "All translation providers failed: " + "; ".join(errors)
@@ -326,11 +338,48 @@ class TranslatorService:
             "error": error_message
         }
 
+# Add a helper function to detect language (approximate method)
+def detect_language(text: str) -> str:
+    """
+    Basic language detection for common languages.
+    This is a simplified method - in production, use a proper language detection library
+    """
+    # Common words/patterns for some languages
+    patterns = {
+        "en": ["the", "and", "is", "in", "to", "of", "that", "for", "with", "as"],
+        "es": ["el", "la", "los", "las", "es", "en", "de", "que", "por", "con", "para"],
+        "fr": ["le", "la", "les", "est", "en", "de", "que", "pour", "avec", "comme"],
+        "pt": ["o", "a", "os", "as", "é", "em", "de", "que", "por", "com", "para"],
+        "de": ["der", "die", "das", "ist", "in", "zu", "mit", "für", "und", "von"],
+        "it": ["il", "la", "le", "è", "in", "di", "che", "per", "con", "come"],
+    }
+    
+    text = text.lower()
+    words = text.split()
+    scores = {}
+    
+    for lang, common_words in patterns.items():
+        count = sum(1 for word in words if word in common_words)
+        if words:
+            scores[lang] = count / len(words)
+    
+    if not scores:
+        return "en"  # Default to English if no match
+    
+    # Get language with highest score
+    detected_lang = max(scores.items(), key=lambda x: x[1])
+    
+    # Only return if confidence is reasonable
+    if detected_lang[1] > 0.1:
+        return detected_lang[0]
+    return "en"  # Default to English
+
 def smart_translate(text: str, target_lang: str, source_lang: Optional[str] = None,
                   tone: str = "default", deepl_key: Optional[str] = None,
-                  gemini_key: Optional[str] = None, openai_key: Optional[str] = None) -> Dict[str, str]:
+                  gemini_key: Optional[str] = None, openai_key: Optional[str] = None,
+                  use_cache: bool = True, retry_count: int = 1) -> Dict[str, Any]:
     """
-    Main function to translate text using available providers
+    Main function to translate text using available providers with caching and retry
     
     Args:
         text: Text to translate
@@ -340,27 +389,134 @@ def smart_translate(text: str, target_lang: str, source_lang: Optional[str] = No
         deepl_key: DeepL API key
         gemini_key: Google Gemini API key
         openai_key: OpenAI API key
+        use_cache: Whether to use the translation cache
+        retry_count: Number of retry attempts for each provider
     
     Returns:
         dict: {
             "translation": translated text,
-            "provider": name of provider used
+            "provider": name of provider used,
+            "error": error message if all providers failed
         }
     """
-    # Create service and set up providers
-    service = TranslatorService()
-    service.setup_providers(
-        deepl_key=deepl_key,
-        gemini_key=gemini_key,
-        openai_key=openai_key
-    )
+    # Check if translation is in cache
+    if use_cache:
+        cached_result = translation_cache.get_translation(
+            text=text,
+            target_lang=target_lang,
+            source_lang=source_lang,
+            tone=tone
+        )
+        if cached_result:
+            logger.info(f"Using cached translation from {cached_result['provider']}")
+            return cached_result
     
-    # Perform translation
-    result = service.translate(
-        text=text,
-        target_lang=target_lang,
-        source_lang=source_lang,
-        tone=tone
-    )
+    # Otimização: Se apenas uma API key estiver disponível, podemos ir direto para esse provedor
+    # sem a necessidade de configurar todos os outros
+    
+    # Check if only one provider key is available
+    available_keys = [k for k in [deepl_key, gemini_key, openai_key] if k]
+    if len(available_keys) == 1:
+        # Single provider path - faster execution
+        if deepl_key:
+            try:
+                logger.info("Using direct DeepL translation path")
+                translator = DeepLTranslator(deepl_key)
+                translation = translator.translate(
+                    text=text,
+                    target_lang=target_lang,
+                    source_lang=source_lang,
+                    tone=tone
+                )
+                result = {
+                    "translation": translation,
+                    "provider": "deepl",
+                    "error": None
+                }
+            except Exception as e:
+                logger.error(f"DeepL translation failed: {e}")
+                result = {
+                    "translation": "",
+                    "provider": None,
+                    "error": f"DeepL translation failed: {str(e)}"
+                }
+        elif gemini_key:
+            try:
+                logger.info("Using direct Gemini translation path")
+                translator = GeminiTranslator(gemini_key)
+                translation = translator.translate(
+                    text=text,
+                    target_lang=target_lang,
+                    source_lang=source_lang,
+                    tone=tone
+                )
+                result = {
+                    "translation": translation,
+                    "provider": "gemini",
+                    "error": None
+                }
+            except Exception as e:
+                logger.error(f"Gemini translation failed: {e}")
+                result = {
+                    "translation": "",
+                    "provider": None,
+                    "error": f"Gemini translation failed: {str(e)}"
+                }
+        elif openai_key:
+            try:
+                logger.info("Using direct OpenAI translation path")
+                translator = OpenAITranslator(openai_key)
+                translation = translator.translate(
+                    text=text,
+                    target_lang=target_lang,
+                    source_lang=source_lang,
+                    tone=tone
+                )
+                result = {
+                    "translation": translation,
+                    "provider": "openai",
+                    "error": None
+                }
+            except Exception as e:
+                logger.error(f"OpenAI translation failed: {e}")
+                result = {
+                    "translation": "",
+                    "provider": None,
+                    "error": f"OpenAI translation failed: {str(e)}"
+                }
+        else:
+            result = {
+                "translation": "",
+                "provider": None,
+                "error": "No translation providers available"
+            }
+    else:
+        # Multiple providers available, use the fallback chain
+        # Create service and set up providers
+        service = TranslatorService()
+        service.setup_providers(
+            deepl_key=deepl_key,
+            gemini_key=gemini_key,
+            openai_key=openai_key
+        )
+        
+        # Perform translation with retries
+        result = service.translate(
+            text=text,
+            target_lang=target_lang,
+            source_lang=source_lang,
+            tone=tone,
+            retry_count=retry_count
+        )
+    
+    # Cache the successful translation
+    if use_cache and result["translation"] and not result["error"]:
+        translation_cache.cache_translation(
+            text=text,
+            result=result,
+            target_lang=target_lang,
+            source_lang=source_lang,
+            tone=tone
+        )
     
     return result
