@@ -1,0 +1,9 @@
+runtime: python310
+
+entrypoint: streamlit run 0_🏠_Home.py --server.port=$PORT --server.address=0.0.0.0
+
+handlers:
+  - url: /.*
+    secure: always
+    redirect_http_response_code: 301
+    script: auto

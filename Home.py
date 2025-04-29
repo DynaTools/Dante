@@ -35,15 +35,6 @@ with st.sidebar:
     with st.expander("API Keys", expanded=True):
         with st.form("api_keys_form"):
             st.caption("Enter API keys for translation services")
-            st.markdown("""
-            <small>API keys are required to use the translation features. 
-            You only need <b>one</b> key from any of the providers below to start translating.
-            Get your keys here:
-            - [Google Gemini](https://aistudio.google.com/app/apikey)
-            - [OpenAI](https://platform.openai.com/api-keys)
-            - [DeepL](https://www.deepl.com/pro-api?cta=header-pro-api/)
-            </small>
-            """, unsafe_allow_html=True)
             
             deepl_key = st.text_input("DeepL API Key", type="password", 
                                      value=get_key("deepl_key") or "")
@@ -77,29 +68,14 @@ with st.sidebar:
             }
             st.rerun()
 
-# Main app header with about section
-col1, col2, col3 = st.columns([1, 2, 1])
+# Main app header
+col1, col2 = st.columns([1, 3])
 with col1:
     st.title("Dante AI")
 with col2:
     st.markdown("### Translation and Italian Grammar Learning Portal")
     st.markdown("*Quisquis postulat, recipit; qui quaerit, invenit; et qui postulat, aperietur*")
     st.caption("Fast and accurate translations with DeepL, Gemini, and OpenAI")
-with col3:
-    with st.expander("🏠 About Dante AI"):
-        st.markdown("""
-        **Dante AI** is a comprehensive language learning portal that combines:
-        
-        - Multi-provider translation services
-        - Italian grammar analysis
-        - Practice exercises
-        - Interactive conversations
-        
-        The portal uses advanced AI models to provide accurate translations and 
-        in-depth grammar analysis, helping you improve your language skills.
-        
-        _Your journey to mastering Italian starts here._
-        """)
 
 # Render the translator interface
 render_translator_interface()

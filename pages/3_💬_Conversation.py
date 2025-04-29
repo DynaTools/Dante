@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Verborum - Conversation",
+    page_title="Dante AI - Conversation",
     page_icon="💬",
     layout="wide"
 )
@@ -21,7 +21,7 @@ The Conversation section will allow you to practice your language skills in a co
 
 Check back soon for these interactive conversation features!
 
-*Verborum: Qui quaerit, inveniet; pulsanti aperietur*
+*Dante AI: Qui quaerit, inveniet; pulsanti aperietur*
 """)
 
 st.info("This feature is currently under development. Please check back later for updates.")

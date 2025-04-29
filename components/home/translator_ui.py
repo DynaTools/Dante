@@ -86,7 +86,7 @@ def render_translator_interface():
                 st.download_button(
                     "Export History",
                     data=json.dumps(st.session_state.history, indent=2),
-                    file_name=f"verborum_history_{datetime.datetime.now().strftime('%Y%m%d')}.json",
+                    file_name=f"dante_ai_history_{datetime.datetime.now().strftime('%Y%m%d')}.json",
                     mime="application/json",
                     use_container_width=True
                 )

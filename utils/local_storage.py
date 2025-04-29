@@ -42,11 +42,11 @@ def save_key(key_name: str, value: str) -> None:
         'value': base64.b64encode(encrypted_value).decode('utf-8'),
         'salt': base64.b64encode(salt).decode('utf-8')
     }
-    st.session_state[f"verborum_key_{key_name}"] = json.dumps(storage_data)
+    st.session_state[f"dante_ai_key_{key_name}"] = json.dumps(storage_data)
 
 def get_key(key_name: str) -> str:
     """Retrieve and decrypt an API key from session state."""
-    storage_key = f"verborum_key_{key_name}"
+    storage_key = f"dante_ai_key_{key_name}"
     stored_data = st.session_state.get(storage_key)
     
     if not stored_data:
@@ -70,7 +70,7 @@ def get_key(key_name: str) -> str:
 
 def clear_key(key_name: str) -> None:
     """Remove an API key from session state."""
-    storage_key = f"verborum_key_{key_name}"
+    storage_key = f"dante_ai_key_{key_name}"
     if storage_key in st.session_state:
         del st.session_state[storage_key]
 

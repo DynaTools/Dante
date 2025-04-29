@@ -5,11 +5,11 @@ import datetime
 from components.grammar.grammar_base import init_gemini, init_session_state
 from components.grammar.grammar_tools import render_grammar_analyzer
 from components.grammar.grammar_learning import render_grammar_lessons
-from utils.lottie_utils import load_lottieurl, display_lottie_animation
+# Removed Lottie import
 
 # Page configuration
 st.set_page_config(
-    page_title="Verborum - Grammatica Italiana",
+    page_title="Dante AI - Grammatica Italiana",
     page_icon="⚙️",
     layout="wide"
 )
@@ -23,17 +23,7 @@ has_gemini = init_gemini()
 
 # Sidebar for token usage and about section
 with st.sidebar:
-    # Streamlit Lottie animations
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        # Carregando animação Lottie de estudo
-        study_animation = load_lottieurl("https://lottie.host/7ec3694b-5bd8-4685-bd6e-fd95e83f0d0a/elgBD4um9s.json")
-        display_lottie_animation(study_animation, height=120, key="study_anim")
-    with col2:
-        # Carregando animação Lottie de livros/gramática
-        books_animation = load_lottieurl("https://lottie.host/b0889f6d-cf33-4138-a9a4-16ceff8465d0/Y8qUrH2i0H.json")
-        display_lottie_animation(books_animation, height=120, key="books_anim")
-        
+    # Removed Lottie animations section
     # Creator info
     st.markdown("### Created by [Paulo Giavoni](https://www.linkedin.com/in/paulogiavoni/)")
     
@@ -83,7 +73,7 @@ with tab2:
 
 # Page footer
 st.divider()
-st.caption("Verborum Strumenti Grammaticali Italiani • Realizzato con NLTK e Gemini")
+st.caption("Dante AI Strumenti Grammaticali Italiani • Realizzato con NLTK e Gemini")
 
 # Add token count for API usage at the bottom
 if has_gemini:

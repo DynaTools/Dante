@@ -43,7 +43,7 @@ def test_save_and_get_key(mock_get_enc_key, mock_streamlit):
     """Test saving and retrieving an API key using mocked session_state."""
     test_key = "test_api_key"
     test_value = "secret_value_123"
-    storage_key = f"verborum_key_{test_key}"
+    storage_key = f"dante_ai_key_{test_key}"
 
     # Save key (will use mocked _get_encryption_key)
     save_key(test_key, test_value)
@@ -71,7 +71,7 @@ def test_save_and_get_key(mock_get_enc_key, mock_streamlit):
 def test_get_key_decryption_error(mock_get_enc_key, mock_streamlit):
     """Test error handling during key retrieval if decryption fails."""
     test_key = "decryption_error_key"
-    storage_key = f"verborum_key_{test_key}"
+    storage_key = f"dante_ai_key_{test_key}"
 
     # Store some data that won't decrypt correctly with our mock
     bad_encrypted_data = base64.b64encode(b"this_wont_decrypt").decode('utf-8')
@@ -94,7 +94,7 @@ def test_get_key_not_found(mock_streamlit):
 def test_clear_key(mock_streamlit):
     """Test clearing an API key from session_state."""
     test_key = "test_api_key_to_clear"
-    storage_key = f"verborum_key_{test_key}"
+    storage_key = f"dante_ai_key_{test_key}"
 
     # Add a dummy value to session_state first
     mock_streamlit.session_state[storage_key] = 'some_dummy_data'
